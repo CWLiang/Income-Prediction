@@ -6,9 +6,9 @@ This is a temporary script file.
 """
 import numpy as np 
 import pandas as pd 
-import os
 import warnings
 from sklearn import preprocessing, svm
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import make_pipeline
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -17,6 +17,7 @@ from sklearn.metrics import f1_score, accuracy_score
 from xgboost import XGBClassifier
 from sklearn.feature_selection import SelectKBest, f_regression
 import time
+from sklearn.utils import shuffle
 
 warnings.filterwarnings(action='ignore', category=DeprecationWarning)
 
@@ -28,22 +29,28 @@ def labelEncoding(data, labels):
         
     return data
 
-'''
-viz_df,target, _ = preprocess(training, testing)
-viz_df['target'] = target
-hmap = viz_df.corr()
-plt.subplots(figsize=(12, 9))
-sns.heatmap(hmap, vmax=.9,annot=True,cmap="BrBG", square=True);
+def scaler(data):
+    
+    for col in data.columns:
+        m = min(data[col].values)
+        M = max(data[col].values)
+        scale = M-m
+        data[col] = data[col].values/scale
+        
+    return data
 
-fig, a = plt.subplots(1,1,figsize=(15,4))
-sns.countplot(training['Age'],hue=training['target'], ax=a)
+def oversampling(data):
+    
+    idx = data['target'] == 1
+    idy = data['target'] == 0
+    
+    tmp1 = data[idx]
+    tmp0 = data[idy]
+    data = data.append([tmp1]*5,ignore_index=True)
+    data = data.append([tmp0]*1, ignore_index=True)
 
-fig, a = plt.subplots(1,1,figsize=(15,4))
-sns.countplot(training['Education'],hue=training['target'], ax=a)
-
-fig, a = plt.subplots(1,1,figsize=(15,4))
-sns.countplot(training['Sex'],hue=training['target'], ax=a)
-'''
+    
+    return shuffle(data)
 
 
 features = ['age', 'workclass','fnlwgt', 'education', 'education-num', 'marital-status', 'occupation', 'relationship', 'race', 'sex', 'capital-gain', 'capital-loss', 'hours-per-week', 'native-country']
@@ -54,45 +61,51 @@ labels = ['workclass', 'education', 'marital-status', 'sex', 'occupation', 'educ
 trainData = pd.read_csv('train.csv', header=None, names = features_train)
 testData = pd.read_csv('test.csv', header=None, names = features)
 
+#trainData = oversampling(trainData)
+
 target = trainData['target'].values
+
+a0 = 0
+a1 = 0
+
+for t in target:
+    if t == 0:
+        a0 = a0+1
+    else:
+        a1 = a1+1
+        
+print("0:", a0, "a1:", a1)
+
 trainData = trainData.drop(['target'], axis=1)
 
 trainData = labelEncoding(trainData, labels)
 testData = labelEncoding(testData, labels)
 
-# Pipeline Anova SVM
+trainData = scaler(trainData)
+testData = scaler(testData)
 
 kf = KFold(n_splits=8, random_state=42)
-f1_scores = []
-
-anova_filter = SelectKBest(f_regression, k=3)
-clf = svm.SVC(kernel='linear')
-anova_svm = make_pipeline(anova_filter, clf)
-
-for train_idx, test_idx in kf.split(target):
-    X_train, X_test = trainData.iloc[train_idx], trainData.iloc[test_idx]
-    y_train, y_test = target[train_idx], target[test_idx]
-    anova_svm.fit(X_train, y_train)
-    y_pred = anova_svm.predict(X_test)
-    
-    f1_scores.append(f1_score(y_test, y_pred, average='weighted'))
-    
-print("F1 平均: %f, 標準差 : %f" % (np.mean(f1_scores), np.std(f1_scores)))
-
-
-'''
-kf = KFold(n_splits=8, random_state=42)
-f1_scores = []
-
-for train_idx, test_idx in kf.split(target):
-    X_train, X_test = trainData.iloc[train_idx], trainData.iloc[test_idx]
-    y_train, y_test = target[train_idx], target[test_idx]
-    clf = XGBClassifier(colsample_bylevel=0.6, 
+tStart = time.time()
+myfilter = SelectKBest(f_regression, k=13)
+clf = XGBClassifier(colsample_bylevel=0.6, 
             colsample_bytree= 0.9, gamma= 5, max_delta_step= 3, max_depth= 11,
             min_child_weight= 5, n_estimators= 209, subsample= 0.9)
-    clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
+myModel = make_pipeline(myfilter, clf)
+f1_scores = []
+for train_idx, test_idx in kf.split(target):
+    X_train, X_test = trainData.iloc[train_idx], trainData.iloc[test_idx]
+    y_train, y_test = target[train_idx], target[test_idx]
+    myModel.fit(X_train, y_train)
+    y_pred = myModel.predict(X_test)
     f1_scores.append(f1_score(y_test, y_pred, average='weighted'))
     
-print("F1 平均: %f, 標準差 : %f" % (np.mean(f1_scores), np.std(f1_scores)))
-'''
+print("Mean : %f, sigma : %f" % (np.mean(f1_scores), np.std(f1_scores)))
+tEnd = time.time()
+print("Model training time:", tEnd - tStart, "seconds")
+
+y_pred = myModel.predict(testData)
+answer = pd.read_csv('sub.csv')
+answer['ans'] = y_pred
+answer.to_csv('answer.csv', index=False)
+
+
