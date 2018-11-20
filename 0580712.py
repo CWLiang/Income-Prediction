@@ -1,19 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Spyder Editor
-
-This is a temporary script file.
-"""
 import numpy as np 
 import pandas as pd 
 import warnings
-from sklearn import preprocessing, svm
-from sklearn.preprocessing import MinMaxScaler
+from sklearn import preprocessing
 from sklearn.pipeline import make_pipeline
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score
 from xgboost import XGBClassifier
 from sklearn.feature_selection import SelectKBest, f_regression
 import time
@@ -46,8 +37,8 @@ def oversampling(data):
     
     tmp1 = data[idx]
     tmp0 = data[idy]
-    data = data.append([tmp1]*5,ignore_index=True)
-    data = data.append([tmp0]*1, ignore_index=True)
+    data = data.append([tmp1]*2,ignore_index=True)
+    #data = data.append([tmp0]*0, ignore_index=True)
 
     
     return shuffle(data)
@@ -62,6 +53,8 @@ trainData = pd.read_csv('train.csv', header=None, names = features_train)
 testData = pd.read_csv('test.csv', header=None, names = features)
 
 #trainData = oversampling(trainData)
+
+trainData = shuffle(trainData)
 
 target = trainData['target'].values
 
@@ -87,9 +80,10 @@ testData = scaler(testData)
 kf = KFold(n_splits=8, random_state=42)
 tStart = time.time()
 myfilter = SelectKBest(f_regression, k=13)
+#clf = XGBClassifier()
 clf = XGBClassifier(colsample_bylevel=0.6, 
-            colsample_bytree= 0.9, gamma= 5, max_delta_step= 3, max_depth= 11,
-            min_child_weight= 5, n_estimators= 209, subsample= 0.9)
+            colsample_bytree= 0.9, gamma= 5, max_delta_step= 3, max_depth= 10,
+            min_child_weight= 1, n_estimators= 209, subsample= 0.9)
 myModel = make_pipeline(myfilter, clf)
 f1_scores = []
 for train_idx, test_idx in kf.split(target):
